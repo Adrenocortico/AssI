@@ -56,13 +56,6 @@ def valida_telefono(telefono):
 # Inizializza il modello GPT-4o-mini
 llm = ChatOpenAI(model_name="gpt-4o-mini")
 
-# Definisci gli assistenti per ogni servizio specifico
-# Prompt di raccolta dati per il preventivo auto
-# Set delle garanzie riconosciute
-garanzie_possibili = {"assistenza", "cristalli", "tutela legale", "incendio", "furto",
-                      "atti vandalici", "fenomeni naturali", "infortuni del conducente",
-                      "garanzie aggiuntive", "kasko", "collisione"}
-
 # Prompt per interpretare la richiesta del cliente e identificare sinonimi di rimozione
 prompt_rimozione = PromptTemplate(
     input_variables=["richiesta_cliente", "garanzie"],
@@ -73,6 +66,11 @@ prompt_rimozione = PromptTemplate(
     )
 )
 rimozione_chain = LLMChain(llm=llm, prompt=prompt_rimozione)
+
+# Definisci gli assistenti per ogni servizio specifico
+# Prompt di raccolta dati per il preventivo auto
+# Set delle garanzie riconosciute
+garanzie_possibili_auto = {"assistenza", "cristalli", "tutela legale", "incendio", "furto", "atti vandalici", "fenomeni naturali", "infortuni del conducente", "kasko", "collisione"}
 
 # Prompt per interpretare la richiesta di preventivo auto con informazioni aggiuntive
 prompt_auto = PromptTemplate(
@@ -145,7 +143,7 @@ def assistente_auto():
 
         # Rileva garanzie da rimuovere usando il modello GPT
         risposta_rimozione = rimozione_chain.invoke(
-            {"richiesta_cliente": richiesta_cliente, "garanzie": ", ".join(garanzie_possibili)})
+            {"richiesta_cliente": richiesta_cliente, "garanzie": ", ".join(garanzie_possibili_auto)})
         garanzie_da_rimuovere = risposta_rimozione["text"].split(
             ", ") if risposta_rimozione["text"] != "Nessuna" else []
 
@@ -169,7 +167,7 @@ def assistente_auto():
         # Aggiunge nuove garanzie richieste
         parole_richiesta = set(richiesta_cliente.split())
         garanzie_richieste = {
-            g for g in garanzie_possibili if g in parole_richiesta}
+            g for g in garanzie_possibili_auto if g in parole_richiesta}
         contesto["garanzie"].update(garanzie_richieste)
 
         # Mostra la risposta dell'assistente e aggiorna il contesto
@@ -184,10 +182,127 @@ def assistente_infortuni():
     # Codice specifico per assistenza infortuni
     # Es. Raccolta dettagli sulla copertura infortuni, beneficiari, ecc.
 
-def assistente_casa():
+# Set delle garanzie possibili per la polizza casa
+garanzie_possibili_casa = {
+    "incendio del fabbricato", "incendio del contenuto", "furto del contenuto",
+    "furto dei gioielli e preziosi", "scippo e rapina", "responsabilità civile della famiglia",
+    "responsabilità civile della proprietà", "ricorso terzi", "tutela legale"
+}
+
+# Prompt per interpretare la richiesta di preventivo casa con informazioni aggiuntive
+prompt_casa = PromptTemplate(
+    input_variables=["richiesta_cliente", "garanzie_attuali"],
+    template=(
+        "Sei un assistente virtuale di un'agenzia assicurativa specializzato in polizze casa. "
+        "Il cliente ha chiesto: '{richiesta_cliente}'. "
+        "Finora, le garanzie richieste dal cliente sono: {garanzie_attuali}.\n\n"
+        "Interpreta la richiesta utilizzando le seguenti regole:\n"
+        "- Raccogli i dettagli obbligatori per il preventivo:\n"
+        "  - ubicazione del rischio (indirizzo dell’immobile)\n"
+        "  - metri quadri dell’immobile\n"
+        "  - numero di piani del fabbricato\n"
+        "  - tipo di casa (es. appartamento, villa, ecc.)\n"
+        "  - anno di costruzione o ultima ristrutturazione completa\n\n"
+        "Rispondi in modo naturale e chiedi solo i dettagli aggiuntivi necessari per completare il preventivo."
+    )
+)
+chain_casa = LLMChain(llm=llm, prompt=prompt_casa)
+
+# Funzione per gestire l'interazione per la polizza casa
+def assistente_casa_cliente():
     print("Benvenuto all'assistente specializzato per le polizze casa.")
-    # Codice specifico per assistenza casa
-    # Es. Raccolta dettagli sull’immobile, copertura desiderata, ecc.
+    print("Per iniziare, raccogliamo alcune informazioni di base sull'immobile per il preventivo.")
+    
+    # Contesto della conversazione per ricordare i dettagli dell’immobile e le garanzie richieste
+    contesto = {
+        "ubicazione": None,
+        "metri_quadri": None,
+        "piani_fabbricato": None,
+        "tipo_casa": None,
+        "anno_costruzione": None,
+        "garanzie": set()
+    }
+
+    # Raccoglie l'ubicazione del rischio immediatamente
+    while not contesto["ubicazione"]:
+        contesto["ubicazione"] = input("Inserisci l'ubicazione dell’immobile (indirizzo): ").strip()
+        if not contesto["ubicazione"]:
+            print("Errore: L'ubicazione dell'immobile è obbligatoria.")
+
+    # Raccoglie le altre informazioni necessarie per il preventivo
+    while not contesto["metri_quadri"]:
+        try:
+            contesto["metri_quadri"] = int(input("Inserisci i metri quadri dell’immobile: ").strip())
+        except ValueError:
+            print("Errore: Inserisci un numero valido per i metri quadri.")
+
+    while not contesto["piani_fabbricato"]:
+        try:
+            contesto["piani_fabbricato"] = int(input("Inserisci il numero di piani del fabbricato: ").strip())
+        except ValueError:
+            print("Errore: Inserisci un numero valido per i piani.")
+
+    while not contesto["tipo_casa"]:
+        contesto["tipo_casa"] = input("Inserisci il tipo di casa (es. appartamento, villa): ").strip().lower()
+        if not contesto["tipo_casa"]:
+            print("Errore: Il tipo di casa è obbligatorio.")
+
+    while not contesto["anno_costruzione"]:
+        try:
+            contesto["anno_costruzione"] = int(input("Inserisci l'anno di costruzione o dell'ultima ristrutturazione completa: ").strip())
+        except ValueError:
+            print("Errore: Inserisci un numero valido per l'anno.")
+
+    print("\nDettagli dell'immobile registrati correttamente.")
+
+    while True:
+        richiesta_cliente = input("Descrivi le garanzie o altre richieste specifiche per il preventivo, oppure digita 'fine' per terminare: ").strip().lower()
+        
+        # Controllo della presenza dei dati obbligatori per consentire la chiusura
+        if richiesta_cliente == "fine":
+            if all([contesto["ubicazione"], contesto["metri_quadri"], contesto["piani_fabbricato"], contesto["tipo_casa"], contesto["anno_costruzione"], contesto["garanzie"]]):
+                print("\n*** Riepilogo della richiesta ***")
+                print("Ubicazione:", contesto["ubicazione"])
+                print("Metri quadri:", contesto["metri_quadri"])
+                print("Piani del fabbricato:", contesto["piani_fabbricato"])
+                print("Tipo di casa:", contesto["tipo_casa"])
+                print("Anno di costruzione/ristrutturazione:", contesto["anno_costruzione"])
+                print("Garanzie scelte:", ", ".join(contesto["garanzie"]))
+                print("Grazie per aver completato la richiesta. Rimaniamo a disposizione!")
+                break
+            else:
+                print("Mancano ancora dei dati essenziali per completare la richiesta. Assicurati di aver fornito tutte le informazioni sull’immobile e le garanzie desiderate.")
+                continue
+
+        # Usa il modello per interpretare la richiesta e rispondere
+        garanzie_attuali = ", ".join(contesto["garanzie"]) if contesto["garanzie"] else "Nessuna garanzia ancora selezionata"
+        risposta_preventivo = chain_casa.invoke({
+            "richiesta_cliente": richiesta_cliente,
+            "garanzie_attuali": garanzie_attuali
+        })
+        risposta_testo = risposta_preventivo["text"]
+
+        # Rileva garanzie da rimuovere usando il modello GPT
+        risposta_rimozione = rimozione_chain.invoke({"richiesta_cliente": richiesta_cliente, "garanzie": ", ".join(garanzie_possibili_casa)})
+        garanzie_da_rimuovere = risposta_rimozione["text"].split(", ") if risposta_rimozione["text"] != "Nessuna" else []
+
+        # Rimuovi le garanzie specificate per rimozione
+        for garanzia in garanzie_da_rimuovere:
+            if garanzia in contesto["garanzie"]:
+                contesto["garanzie"].discard(garanzia)
+                print(f"Garanzia '{garanzia}' rimossa.")
+
+        # Aggiunge nuove garanzie richieste
+        parole_richiesta = set(richiesta_cliente.split())
+        garanzie_richieste = {g for g in garanzie_possibili_casa if g in parole_richiesta}
+        contesto["garanzie"].update(garanzie_richieste)
+
+        # Mostra la risposta dell'assistente e aggiorna il contesto
+        print("Risposta dell'assistente casa:", risposta_testo)
+        
+        # Mostra solo le garanzie incluse
+        print("\nGaranzie già incluse:", ", ".join(contesto["garanzie"]))
+        print("Contesto attuale:", contesto)
 
 def assistente_salute():
     print("Benvenuto all'assistente specializzato per le polizze salute.")
