@@ -122,54 +122,60 @@ if cliente == "no":
     print("Grazie per aver fornito le informazioni. Ora ti colleghiamo con il nostro front office per ulteriori dettagli.")
     cliente = "sì"  # Ora trattiamo il cliente come censito
 
+# Prompt per interpretare la richiesta del cliente e determinare l'assistente corretto
+prompt_instradamento = PromptTemplate(
+    input_variables=["richiesta_cliente"],
+    template=(
+        "Sei un assistente virtuale per un'agenzia assicurativa chiamata Assistudio Vigevano. "
+        "Un cliente ti ha fatto la seguente richiesta: '{richiesta_cliente}'. "
+        "Determina quale assistente specifico deve rispondere alla richiesta. Le possibili opzioni sono:\n"
+        "- 'auto' per richieste su polizze auto\n"
+        "- 'casa' per richieste su polizze casa\n"
+        "- 'infortuni' per richieste su polizze infortuni\n"
+        "- 'salute' per richieste su polizze salute\n"
+        "- 'sinistri' per richieste di gestione o denuncia sinistri\n"
+        "- 'generico' per domande generiche su assicurazioni o sull'agenzia\n\n"
+        "Rispondi semplicemente con l'opzione corretta: 'auto', 'casa', 'infortuni', 'salute', 'sinistri' o 'generico'."
+    )
+)
+instradamento_chain = prompt_instradamento | llm
+
+# Prompt per rispondere a domande generiche con contesto aggiuntivo
 prompt_benvenuto = PromptTemplate(
     input_variables=["domanda_cliente"],
     template=(
         "Sei l'assistente front-office di benvenuto di Assistudio Vigevano. Il cliente è già censito e stai per accoglierlo. "
         "Informazioni su Assistudio Vigevano:\n"
-        "Indirizzo: Corso Pavia, 71/5 – 27029 – Vigevano (PV)\n"
-        "Email: assistudiovigevano@gmail.com\n"
-        "Numero centralino: 038174441\n\n"
-        "Rispondi alle domande del cliente sulla nostra agenzia o sulle polizze assicurative in generale. "
+        "- Indirizzo: Corso Pavia, 71/5 - Vigevano (PV)\n"
+        "- Email: assistudiovigevano@gmail.com\n"
+        "- Numero centralino: 038174441\n"
+        "- Sito internet: www.assistudiovigevano.com\n\n"
+        "Assistudio Vigevano offre una gamma di polizze assicurative per proteggere i suoi clienti in ogni ambito della loro vita:\n"
+        "- Polizze auto: copertura per incidenti, furto, incendio, e assistenza stradale.\n"
+        "- Polizze casa: protezione contro furto, danni, incendio e calamità naturali.\n"
+        "- Polizze infortuni: copertura per infortuni personali, anche sul lavoro.\n"
+        "- Polizze salute: copertura per spese sanitarie e assistenza medica.\n"
+        "- Gestione sinistri: supporto completo per la gestione di incidenti e richieste di risarcimento.\n\n"
+        "I valori di Assistudio Vigevano includono l'affidabilità, la trasparenza e l'attenzione al cliente, con un team esperto e dedicato a garantire sicurezza e tranquillità ai propri assicurati.\n\n"
+        "Le sedi sono a Vigevano in Corso Pavia, 71/5 e a Cilavegna (PV) in Piazza Garibaldi, 1.\n"
+        "Gli orari sono dal lunedì al venerdì dalle 09:00 alle 12:30 e dalle 14:30 alle 19:00, il sabato dalle 10:00 alle 12:00.\n\n"
+        "Rispondi alle domande del cliente sulla nostra agenzia o sulle polizze assicurative in generale, "
+        "usando queste informazioni per rendere le risposte più complete e rilevanti.\n\n"
         "Domanda del cliente: {domanda_cliente}"
     )
 )
-assistente_benvenuto_chain = LLMChain(llm=llm, prompt=prompt_benvenuto)
+assistente_benvenuto_chain = prompt_benvenuto | llm
 
-# Funzione dell'assistente di benvenuto per i clienti già censiti
-def assistente_benvenuto_cliente():
-    print("Benvenuto da Assistudio Vigevano! Sono qui per assisterti con le tue esigenze assicurative.")
-    print("Ecco alcune informazioni di base su di noi:")
-    print("Indirizzo: Corso Pavia, 71/5 – 27029 – Vigevano (PV)")
-    print("Email: assistudiovigevano@gmail.com")
-    print("Numero centralino: 038174441")
-    print("Sono qui per aiutarti! Dimmi pure come posso assisterti.")
-
-    while True:
-        richiesta = input("Hai qualche domanda o richiesta specifica? (Digita 'fine' per uscire): ").strip().lower()
-        
-        if richiesta == "fine":
-            print("Grazie per averci contattato! Siamo sempre a disposizione.")
-            break
-        else:
-            # Utilizza LangChain per generare la risposta dell'assistente di benvenuto
-            risposta = assistente_benvenuto_chain.invoke({"domanda_cliente": richiesta})
-            print("Risposta dell'assistente:", risposta["text"])
-
-
-prompt_benvenuto = PromptTemplate(
-    input_variables=["domanda_cliente"],
+prompt_saluto = PromptTemplate(
+    input_variables=["nome_cliente"],
     template=(
-        "Sei l'assistente di benvenuto di Assistudio Vigevano. Il cliente è già censito e stai per accoglierlo. "
-        "Informazioni su Assistudio Vigevano:\n"
-        "Indirizzo: Corso Pavia, 71/5 – 27029 – Vigevano (PV)\n"
-        "Email: assistudiovigevano@gmail.com\n"
-        "Numero centralino: 038174441\n\n"
-        "Rispondi alle domande del cliente sulla nostra agenzia o sulle polizze assicurative in generale. "
-        "Domanda del cliente: {domanda_cliente}"
+        "Stai concludendo una conversazione con un cliente di nome {nome_cliente} per Assistudio Vigevano. "
+        "Salute in modo amichevole e professionale per chiudere la conversazione in modo positivo. Scrivi un messaggio unico e cordiale."
+        "Includi un augurio e invita il cliente a contattare di nuovo l'agenzia se ha altre domande."
+        "Non firmarti mai."
     )
 )
-assistente_benvenuto_chain = LLMChain(llm=llm, prompt=prompt_benvenuto)
+saluto_chain = prompt_saluto | llm
 
 # Funzione dell'assistente di benvenuto per i clienti già censiti
 def assistente_benvenuto_cliente():
@@ -185,53 +191,52 @@ def assistente_benvenuto_cliente():
             "Hai qualche domanda o richiesta specifica? (Digita 'fine' per uscire): ").strip().lower()
 
         if richiesta == "fine":
-            print("Spero di aver risposto alle tue domande generiche. Ora se vuoi puoi procedere con qualche richiesta più specifica.")
-            break
+            # Usa LangChain per generare un saluto finale unico e vario
+            saluto_finale = saluto_chain.invoke({"nome_cliente": nome})
+            # Mostra il saluto finale una sola volta
+            print(saluto_finale.content)
+            return  # Esce immediatamente senza chiedere ulteriori informazioni
         else:
-            # Utilizza LangChain per generare la risposta dell'assistente di benvenuto
-            risposta = assistente_benvenuto_chain.invoke({"domanda_cliente": richiesta})
-            print("Risposta dell'assistente:", risposta["text"])
+            # Usa LangChain per interpretare la richiesta e decidere l'assistente corretto
+            risposta = instradamento_chain.invoke(
+                {"richiesta_cliente": richiesta})
+            # Estrai il testo dal dizionario
+            decisione = risposta.content.strip().lower()
 
-# Richiesta del codice fiscale e conferma front office
+            # Instrada il cliente all'assistente specifico in base alla decisione
+            if decisione == "auto":
+                print("Connettendo all'assistente specializzato per auto...")
+                assistente_auto()
+                return
+            elif decisione == "casa":
+                print("Connettendo all'assistente specializzato per casa...")
+                assistente_casa()
+                return
+            elif decisione == "infortuni":
+                print("Connettendo all'assistente specializzato per infortuni...")
+                assistente_infortuni()
+                return
+            elif decisione == "salute":
+                print("Connettendo all'assistente specializzato per salute...")
+                assistente_salute()
+                return
+            elif decisione == "sinistri":
+                print("Connettendo all'assistente specializzato per sinistri...")
+                assistente_sinistri()
+                return
+            elif decisione == "generico":
+                # Rispondi alle domande generiche tramite LangChain
+                risposta_generica = assistente_benvenuto_chain.invoke(
+                    {"domanda_cliente": richiesta})
+                print("Risposta dell'assistente:", risposta_generica.content)
+            else:
+                print(
+                    "Non sono riuscito a determinare l'assistenza corretta. Riprova con maggiori dettagli.")
+
+
+# Flusso principale
 if cliente == "sì":
     assistente_benvenuto_cliente()
-
-    while True:
-        identificativo = input("Per procedere, indica il tuo codice fiscale: ")
-        is_valid, message = valida_codice_fiscale(identificativo)
-        print(message)
-        if is_valid:
-            break
-
-    # Assistenza per il tipo di servizio richiesto
-    tipo_servizio = input(
-        "Per favore, indica quale servizio desideri tra:\n"
-        "- Preventivo auto\n"
-        "- Preventivo casa\n"
-        "- Preventivo infortuni\n"
-        "- Preventivo salute\n"
-        "- Preventivo impresa\n"
-        "- Denuncia sinistro\n"
-        "- Richiesta su sinistro\n"
-        "- Informazioni aggiuntive\n"
-        "Risposta: "
-    ).strip().lower()
-
-    # Instradamento verso assistenti specifici
-    if tipo_servizio in ["preventivo auto", "auto"]:
-        print("Connettendo all'assistente specializzato per auto...")
-        assistente_auto()
-    elif tipo_servizio in ["preventivo casa", "casa"]:
-        print("Connettendo all'assistente specializzato per casa...")
-        assistente_casa()
-    elif tipo_servizio in ["preventivo infortuni", "infortuni"]:
-        print("Connettendo all'assistente specializzato per infortuni...")
-        assistente_infortuni()
-    elif tipo_servizio in ["preventivo salute", "salute"]:
-        print("Connettendo all'assistente specializzato per salute...")
-        assistente_salute()
-    elif tipo_servizio in ["denuncia sinistro", "sinistro", "richiesta su sinistro"]:
-        print("Connettendo all'assistente specializzato per sinistri...")
-        assistente_sinistri()
-    else:
-        print("Ulteriori dettagli richiesti per capire la tua necessità. Contattando un assistente...")
+else:
+    # Codice per i nuovi clienti (già incluso nel tuo script attuale)
+    pass
