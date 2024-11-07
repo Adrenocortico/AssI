@@ -57,10 +57,82 @@ def valida_telefono(telefono):
 llm = ChatOpenAI(model_name="gpt-4o-mini")
 
 # Definisci gli assistenti per ogni servizio specifico
+# Prompt di raccolta dati per il preventivo auto
+prompt_preventivo_auto = PromptTemplate(
+    input_variables=["targa", "tipo_polizza", "garanzie_opzionali"],
+    template=(
+        "Stai raccogliendo i dati per un preventivo auto per il veicolo con targa {targa}. "
+        "Il tipo di polizza indicato è '{tipo_polizza}'. Le garanzie opzionali richieste sono: {garanzie_opzionali}. "
+        "Genera una conferma dettagliata e assicurati che il cliente sia a conoscenza di tutti i dettagli forniti."
+    )
+)
+preventivo_auto_chain = prompt_preventivo_auto | llm
+
+# Funzione per raccogliere i dati per il preventivo auto
 def assistente_auto():
-    print("Benvenuto all'assistente specializzato per le polizze auto.")
-    # Codice specifico per assistenza auto
-    # Es. Raccolta dettagli del veicolo, tipo di copertura richiesta, ecc.
+    print("Benvenuto all'assistente specializzato per le polizze auto. Procediamo con la raccolta dei dati per il preventivo.")
+
+    # Raccogli la targa
+    while True:
+        targa = input("Inserisci la targa del veicolo: ").strip().upper()
+        if re.match(r'^[A-Z]{2}[0-9]{3}[A-Z]{2}$', targa):
+            break
+        else:
+            print("Errore: la targa inserita non è valida. Inserisci una targa nel formato corretto (es. AA123BB).")
+
+    # Determina se la polizza è nuova o trasferita
+    tipo_polizza = ""
+    while True:
+        risposta_tipo = input(
+            "Questa è una polizza nuova o stiamo trasferendo da un'altra compagnia? "
+            "Se è nuova, indicare se in classe 14 o con attestato di rischio da un'altra targa.\n"
+            "Rispondi con 'nuova' o 'trasferita': "
+        ).strip().lower()
+
+        if risposta_tipo == "nuova":
+            while True:
+                risposta_nuova = input(
+                    "Indica se questa polizza parte in classe 14 o se ha un attestato di rischio da un'altra targa (rispondi con 'classe 14' o 'altra targa'): "
+                ).strip().lower()
+                if risposta_nuova in ["classe 14", "altra targa"]:
+                    tipo_polizza = f"nuova ({risposta_nuova})"
+                    break
+                else:
+                    print(
+                        "Errore: Risposta non valida. Inserisci 'classe 14' o 'altra targa'.")
+            break
+        elif risposta_tipo == "trasferita":
+            tipo_polizza = "trasferita"
+            break
+        else:
+            print("Errore: Risposta non valida. Inserisci 'nuova' o 'trasferita'.")
+
+    # Raccolta delle garanzie opzionali
+    garanzie_opzionali = []
+    garanzie_disponibili = [
+        "assistenza", "cristalli", "tutela legale", "incendio", "furto",
+        "atti vandalici", "fenomeni naturali", "infortuni del conducente",
+        "garanzie aggiuntive", "kasko", "collisione"
+    ]
+
+    print("\nIndica quali garanzie opzionali desideri per questa polizza. Digita 'fine' quando hai finito.")
+    for garanzia in garanzie_disponibili:
+        risposta_garanzia = input(f"Vuoi aggiungere la garanzia {garanzia}? (sì/no): ").strip().lower()
+        if risposta_garanzia in ["sì", "si", "yes"]:
+            garanzie_opzionali.append(garanzia)
+        elif risposta_garanzia == "fine":
+            break
+
+    # Generazione della conferma
+    garanzie_elenco = ", ".join(
+        garanzie_opzionali) if garanzie_opzionali else "nessuna garanzia opzionale"
+    risposta_preventivo = preventivo_auto_chain.invoke({
+        "targa": targa,
+        "tipo_polizza": tipo_polizza,
+        "garanzie_opzionali": garanzie_elenco
+    })
+
+    print("Conferma del preventivo auto:", risposta_preventivo.content)
 
 def assistente_infortuni():
     print("Benvenuto all'assistente specializzato per le polizze infortuni.")
@@ -206,22 +278,56 @@ def assistente_benvenuto_cliente():
             # Instrada il cliente all'assistente specifico in base alla decisione
             if decisione == "auto":
                 print("Connettendo all'assistente specializzato per auto...")
+                while True:
+                    identificativo = input("Per procedere, indica il tuo codice fiscale: ")
+                    is_valid, message = valida_codice_fiscale(identificativo)
+                    print(message)
+                    if is_valid:
+                        break
                 assistente_auto()
                 return
             elif decisione == "casa":
                 print("Connettendo all'assistente specializzato per casa...")
+                while True:
+                    identificativo = input(
+                        "Per procedere, indica il tuo codice fiscale: ")
+                    is_valid, message = valida_codice_fiscale(identificativo)
+                    print(message)
+                    if is_valid:
+                        break
                 assistente_casa()
                 return
             elif decisione == "infortuni":
                 print("Connettendo all'assistente specializzato per infortuni...")
+                while True:
+                    identificativo = input(
+                        "Per procedere, indica il tuo codice fiscale: ")
+                    is_valid, message = valida_codice_fiscale(identificativo)
+                    print(message)
+                    if is_valid:
+                        break
                 assistente_infortuni()
                 return
             elif decisione == "salute":
                 print("Connettendo all'assistente specializzato per salute...")
+                while True:
+                    identificativo = input(
+                        "Per procedere, indica il tuo codice fiscale: ")
+                    is_valid, message = valida_codice_fiscale(identificativo)
+                    print(message)
+                    if is_valid:
+                        break
                 assistente_salute()
                 return
             elif decisione == "sinistri":
                 print("Connettendo all'assistente specializzato per sinistri...")
+                while True:
+                    identificativo = input(
+                        "Per procedere, indica il tuo codice fiscale: ")
+                    is_valid, message = valida_codice_fiscale(identificativo)
+                    print(message)
+                    if is_valid:
+                        break
                 assistente_sinistri()
                 return
             elif decisione == "generico":
