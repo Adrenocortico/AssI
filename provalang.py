@@ -63,8 +63,16 @@ garanzie_possibili = {"assistenza", "cristalli", "tutela legale", "incendio", "f
                       "atti vandalici", "fenomeni naturali", "infortuni del conducente",
                       "garanzie aggiuntive", "kasko", "collisione"}
 
-# Sinonimi di rimozione per riconoscere richieste di rimozione garanzia
-sinonimi_rimozione = {"rimuovi", "elimina", "togli", "escludi", "cancella"}
+# Prompt per interpretare la richiesta del cliente e identificare sinonimi di rimozione
+prompt_rimozione = PromptTemplate(
+    input_variables=["richiesta_cliente", "garanzie"],
+    template=(
+        "Un cliente ha chiesto: '{richiesta_cliente}'. "
+        "Verifica se il cliente sta chiedendo di rimuovere una delle seguenti garanzie: {garanzie}. "
+        "Rispondi semplicemente con i nomi delle garanzie da rimuovere, se presenti nella richiesta, oppure rispondi 'Nessuna' se non ci sono garanzie da rimuovere."
+    )
+)
+rimozione_chain = LLMChain(llm=llm, prompt=prompt_rimozione)
 
 # Prompt per interpretare la richiesta di preventivo auto con informazioni aggiuntive
 prompt_auto = PromptTemplate(
@@ -84,11 +92,9 @@ prompt_auto = PromptTemplate(
 chain_auto = LLMChain(llm=llm, prompt=prompt_auto)
 
 # Funzione per gestire l'interazione per la polizza auto
-
-
 def assistente_auto():
     print("Benvenuto all'assistente specializzato per le polizze auto.")
-    print("Dimmi come posso aiutarti con il preventivo auto.")
+    print("Per iniziare, inserisci la targa del veicolo per il preventivo.")
 
     # Contesto della conversazione per ricordare la situazione assicurativa e garanzie richieste
     contesto = {
@@ -98,57 +104,80 @@ def assistente_auto():
         "garanzie": set()
     }
 
-    # Imposta situazione assicurativa la prima volta e non la ripete
-    prima_interazione = True
+    # Raccoglie la targa immediatamente
+    while not contesto["targa"]:
+        contesto["targa"] = input(
+            "Inserisci la targa del veicolo: ").strip().upper()
+        if not re.match(r'^[A-Z]{2}\d{3}[A-Z]{2}$', contesto["targa"]):
+            print("Errore: La targa inserita non è valida. Assicurati di inserire una targa nel formato corretto (es. AB123CD).")
+            contesto["targa"] = None
+
+    print(f"Targa registrata: {contesto['targa']}")
 
     while True:
         richiesta_cliente = input(
             "Descrivi la tua richiesta o digita 'fine' per terminare: ").strip().lower()
 
+        # Controllo della presenza dei dati obbligatori per consentire la chiusura
         if richiesta_cliente == "fine":
-            # Saluto finale
-            print(
-                "Grazie per aver utilizzato il nostro servizio! Rimaniamo a disposizione.")
-            break
-        else:
-            # Usa il modello per interpretare la richiesta e rispondere
-            garanzie_attuali = ", ".join(
-                contesto["garanzie"]) if contesto["garanzie"] else "Nessuna garanzia ancora selezionata"
-            risposta_preventivo = chain_auto.invoke({
-                "richiesta_cliente": richiesta_cliente,
-                "garanzie_attuali": garanzie_attuali
-            })
-            risposta_testo = risposta_preventivo["text"]
+            if all([contesto["targa"], contesto["tipo_polizza"], contesto["atr"] is not None, contesto["garanzie"]]):
+                print("\n*** Riepilogo della richiesta ***")
+                print("Targa:", contesto["targa"])
+                print("Tipo di polizza:", contesto["tipo_polizza"])
+                print("Attestato di rischio (ATR):",
+                      "Presente" if contesto["atr"] else "Non presente")
+                print("Garanzie scelte:", ", ".join(contesto["garanzie"]))
+                print(
+                    "Grazie per aver completato la richiesta. Rimaniamo a disposizione!")
+                break
+            else:
+                print("Mancano ancora dei dati essenziali per completare la richiesta. Assicurati di aver fornito il tipo di polizza, se hai ATR e le garanzie desiderate.")
+                continue
 
-            # Verifica il contesto di base solo alla prima interazione
-            if prima_interazione:
-                if "atr" in risposta_testo.lower():
-                    contesto["atr"] = True
-                    contesto["tipo_polizza"] = "trasferita"
-                elif "nuova" in risposta_testo.lower():
-                    contesto["tipo_polizza"] = "nuova"
-                prima_interazione = False
+        # Usa il modello per interpretare la richiesta e rispondere
+        garanzie_attuali = ", ".join(
+            contesto["garanzie"]) if contesto["garanzie"] else "Nessuna garanzia ancora selezionata"
+        risposta_preventivo = chain_auto.invoke({
+            "richiesta_cliente": richiesta_cliente,
+            "garanzie_attuali": garanzie_attuali
+        })
+        risposta_testo = risposta_preventivo["text"]
 
-            # Controlla se la richiesta include l'aggiunta o rimozione di garanzie
-            parole_richiesta = set(richiesta_cliente.split())
+        # Rileva garanzie da rimuovere usando il modello GPT
+        risposta_rimozione = rimozione_chain.invoke(
+            {"richiesta_cliente": richiesta_cliente, "garanzie": ", ".join(garanzie_possibili)})
+        garanzie_da_rimuovere = risposta_rimozione["text"].split(
+            ", ") if risposta_rimozione["text"] != "Nessuna" else []
 
-            # Aggiunge garanzie menzionate nella richiesta
-            garanzie_richieste = {
-                g for g in garanzie_possibili if g in parole_richiesta}
-            contesto["garanzie"].update(garanzie_richieste)
+        # Rimuovi le garanzie specificate per rimozione
+        for garanzia in garanzie_da_rimuovere:
+            if garanzia in contesto["garanzie"]:
+                contesto["garanzie"].discard(garanzia)
+                print(f"Garanzia '{garanzia}' rimossa.")
 
-            # Rimozione delle garanzie in base a sinonimi di rimozione e nomi delle garanzie
-            for sinonimo in sinonimi_rimozione:
-                for garanzia in garanzie_possibili:
-                    if f"{sinonimo} {garanzia}" in richiesta_cliente:
-                        contesto["garanzie"].discard(garanzia)
+        # Aggiorna i dati obbligatori in base alla richiesta
+        if "atr" in richiesta_cliente or "attestato di rischio" in richiesta_cliente:
+            contesto["atr"] = True
+            contesto["tipo_polizza"] = "trasferita"
+            print("Tipo di polizza aggiornato: Trasferita con ATR")
 
-            # Mostra la risposta dell'assistente e aggiorna il contesto
-            print("Risposta dell'assistente auto:", risposta_testo)
+        if "nuova" in richiesta_cliente:
+            contesto["tipo_polizza"] = "nuova"
+            contesto["atr"] = False
+            print("Tipo di polizza aggiornato: Nuova")
 
-            # Mostra solo le garanzie incluse
-            print("\nGaranzie già incluse:", ", ".join(contesto["garanzie"]))
-            print("Contexto attuale:", contesto)
+        # Aggiunge nuove garanzie richieste
+        parole_richiesta = set(richiesta_cliente.split())
+        garanzie_richieste = {
+            g for g in garanzie_possibili if g in parole_richiesta}
+        contesto["garanzie"].update(garanzie_richieste)
+
+        # Mostra la risposta dell'assistente e aggiorna il contesto
+        print("Risposta dell'assistente auto:", risposta_testo)
+
+        # Mostra solo le garanzie incluse
+        print("\nGaranzie già incluse:", ", ".join(contesto["garanzie"]))
+        print("Contesto attuale:", contesto)
 
 def assistente_infortuni():
     print("Benvenuto all'assistente specializzato per le polizze infortuni.")
