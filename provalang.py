@@ -58,81 +58,97 @@ llm = ChatOpenAI(model_name="gpt-4o-mini")
 
 # Definisci gli assistenti per ogni servizio specifico
 # Prompt di raccolta dati per il preventivo auto
-prompt_preventivo_auto = PromptTemplate(
-    input_variables=["targa", "tipo_polizza", "garanzie_opzionali"],
+# Set delle garanzie riconosciute
+garanzie_possibili = {"assistenza", "cristalli", "tutela legale", "incendio", "furto",
+                      "atti vandalici", "fenomeni naturali", "infortuni del conducente",
+                      "garanzie aggiuntive", "kasko", "collisione"}
+
+# Sinonimi di rimozione per riconoscere richieste di rimozione garanzia
+sinonimi_rimozione = {"rimuovi", "elimina", "togli", "escludi", "cancella"}
+
+# Prompt per interpretare la richiesta di preventivo auto con informazioni aggiuntive
+prompt_auto = PromptTemplate(
+    input_variables=["richiesta_cliente", "garanzie_attuali"],
     template=(
-        "Stai raccogliendo i dati per un preventivo auto per il veicolo con targa {targa}. "
-        "Il tipo di polizza indicato è '{tipo_polizza}'. Le garanzie opzionali richieste sono: {garanzie_opzionali}. "
-        "Genera una conferma dettagliata e assicurati che il cliente sia a conoscenza di tutti i dettagli forniti."
+        "Sei un assistente virtuale di un'agenzia assicurativa specializzato in polizze auto. "
+        "Il cliente ha chiesto: '{richiesta_cliente}'. "
+        "Finora, le garanzie richieste dal cliente sono: {garanzie_attuali}.\n\n"
+        "Interpreta la richiesta utilizzando le seguenti regole:\n"
+        "- 'ATR' si riferisce all'attestato di rischio\n"
+        "- Se la polizza è trasferita, l'ATR è già disponibile\n"
+        "- Se è una polizza nuova, verifica se il cliente ha classe universale (CU) 14 o richiede l'applicazione del decreto Bersani\n"
+        "  - In caso di Decreto Bersani, chiedi al cliente di fornire la targa del veicolo di riferimento\n\n"
+        "Rispondi in modo naturale e chiedi solo i dettagli aggiuntivi necessari per completare il preventivo."
     )
 )
-preventivo_auto_chain = prompt_preventivo_auto | llm
+chain_auto = LLMChain(llm=llm, prompt=prompt_auto)
 
-# Funzione per raccogliere i dati per il preventivo auto
+# Funzione per gestire l'interazione per la polizza auto
+
+
 def assistente_auto():
-    print("Benvenuto all'assistente specializzato per le polizze auto. Procediamo con la raccolta dei dati per il preventivo.")
+    print("Benvenuto all'assistente specializzato per le polizze auto.")
+    print("Dimmi come posso aiutarti con il preventivo auto.")
 
-    # Raccogli la targa
+    # Contesto della conversazione per ricordare la situazione assicurativa e garanzie richieste
+    contesto = {
+        "targa": None,
+        "tipo_polizza": None,   # 'nuova' o 'trasferita'
+        "atr": None,            # Se ha ATR o meno
+        "garanzie": set()
+    }
+
+    # Imposta situazione assicurativa la prima volta e non la ripete
+    prima_interazione = True
+
     while True:
-        targa = input("Inserisci la targa del veicolo: ").strip().upper()
-        if re.match(r'^[A-Z]{2}[0-9]{3}[A-Z]{2}$', targa):
+        richiesta_cliente = input(
+            "Descrivi la tua richiesta o digita 'fine' per terminare: ").strip().lower()
+
+        if richiesta_cliente == "fine":
+            # Saluto finale
+            print(
+                "Grazie per aver utilizzato il nostro servizio! Rimaniamo a disposizione.")
             break
         else:
-            print("Errore: la targa inserita non è valida. Inserisci una targa nel formato corretto (es. AA123BB).")
+            # Usa il modello per interpretare la richiesta e rispondere
+            garanzie_attuali = ", ".join(
+                contesto["garanzie"]) if contesto["garanzie"] else "Nessuna garanzia ancora selezionata"
+            risposta_preventivo = chain_auto.invoke({
+                "richiesta_cliente": richiesta_cliente,
+                "garanzie_attuali": garanzie_attuali
+            })
+            risposta_testo = risposta_preventivo["text"]
 
-    # Determina se la polizza è nuova o trasferita
-    tipo_polizza = ""
-    while True:
-        risposta_tipo = input(
-            "Questa è una polizza nuova o stiamo trasferendo da un'altra compagnia? "
-            "Se è nuova, indicare se in classe 14 o con attestato di rischio da un'altra targa.\n"
-            "Rispondi con 'nuova' o 'trasferita': "
-        ).strip().lower()
+            # Verifica il contesto di base solo alla prima interazione
+            if prima_interazione:
+                if "atr" in risposta_testo.lower():
+                    contesto["atr"] = True
+                    contesto["tipo_polizza"] = "trasferita"
+                elif "nuova" in risposta_testo.lower():
+                    contesto["tipo_polizza"] = "nuova"
+                prima_interazione = False
 
-        if risposta_tipo == "nuova":
-            while True:
-                risposta_nuova = input(
-                    "Indica se questa polizza parte in classe 14 o se ha un attestato di rischio da un'altra targa (rispondi con 'classe 14' o 'altra targa'): "
-                ).strip().lower()
-                if risposta_nuova in ["classe 14", "altra targa"]:
-                    tipo_polizza = f"nuova ({risposta_nuova})"
-                    break
-                else:
-                    print(
-                        "Errore: Risposta non valida. Inserisci 'classe 14' o 'altra targa'.")
-            break
-        elif risposta_tipo == "trasferita":
-            tipo_polizza = "trasferita"
-            break
-        else:
-            print("Errore: Risposta non valida. Inserisci 'nuova' o 'trasferita'.")
+            # Controlla se la richiesta include l'aggiunta o rimozione di garanzie
+            parole_richiesta = set(richiesta_cliente.split())
 
-    # Raccolta delle garanzie opzionali
-    garanzie_opzionali = []
-    garanzie_disponibili = [
-        "assistenza", "cristalli", "tutela legale", "incendio", "furto",
-        "atti vandalici", "fenomeni naturali", "infortuni del conducente",
-        "garanzie aggiuntive", "kasko", "collisione"
-    ]
+            # Aggiunge garanzie menzionate nella richiesta
+            garanzie_richieste = {
+                g for g in garanzie_possibili if g in parole_richiesta}
+            contesto["garanzie"].update(garanzie_richieste)
 
-    print("\nIndica quali garanzie opzionali desideri per questa polizza. Digita 'fine' quando hai finito.")
-    for garanzia in garanzie_disponibili:
-        risposta_garanzia = input(f"Vuoi aggiungere la garanzia {garanzia}? (sì/no): ").strip().lower()
-        if risposta_garanzia in ["sì", "si", "yes"]:
-            garanzie_opzionali.append(garanzia)
-        elif risposta_garanzia == "fine":
-            break
+            # Rimozione delle garanzie in base a sinonimi di rimozione e nomi delle garanzie
+            for sinonimo in sinonimi_rimozione:
+                for garanzia in garanzie_possibili:
+                    if f"{sinonimo} {garanzia}" in richiesta_cliente:
+                        contesto["garanzie"].discard(garanzia)
 
-    # Generazione della conferma
-    garanzie_elenco = ", ".join(
-        garanzie_opzionali) if garanzie_opzionali else "nessuna garanzia opzionale"
-    risposta_preventivo = preventivo_auto_chain.invoke({
-        "targa": targa,
-        "tipo_polizza": tipo_polizza,
-        "garanzie_opzionali": garanzie_elenco
-    })
+            # Mostra la risposta dell'assistente e aggiorna il contesto
+            print("Risposta dell'assistente auto:", risposta_testo)
 
-    print("Conferma del preventivo auto:", risposta_preventivo.content)
+            # Mostra solo le garanzie incluse
+            print("\nGaranzie già incluse:", ", ".join(contesto["garanzie"]))
+            print("Contexto attuale:", contesto)
 
 def assistente_infortuni():
     print("Benvenuto all'assistente specializzato per le polizze infortuni.")
