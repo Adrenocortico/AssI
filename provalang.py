@@ -7,58 +7,6 @@ from langchain import PromptTemplate
 with open('comuni_italiani.txt', 'r') as file:
     comuni_italiani = {line.strip().upper() for line in file.readlines()}
 
-# Funzione di validazione del codice fiscale
-def calcola_carattere_di_controllo(cf_parziale):
-    # Coefficienti per il calcolo del carattere di controllo
-    valori_pari = {
-        '0': 0, '1': 1, '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9,
-        'A': 0, 'B': 1, 'C': 2, 'D': 3, 'E': 4, 'F': 5, 'G': 6, 'H': 7, 'I': 8, 'J': 9,
-        'K': 0, 'L': 1, 'M': 2, 'N': 3, 'O': 4, 'P': 5, 'Q': 6, 'R': 7, 'S': 8, 'T': 9,
-        'U': 0, 'V': 1, 'W': 2, 'X': 3, 'Y': 4, 'Z': 5
-    }
-
-    valori_dispari = {
-        '0': 1, '1': 0, '2': 5, '3': 7, '4': 9, '5': 13, '6': 15, '7': 17, '8': 19, '9': 21,
-        'A': 1, 'B': 0, 'C': 5, 'D': 7, 'E': 9, 'F': 13, 'G': 15, 'H': 17, 'I': 19, 'J': 21,
-        'K': 2, 'L': 4, 'M': 18, 'N': 20, 'O': 11, 'P': 3, 'Q': 6, 'R': 8, 'S': 12, 'T': 14,
-        'U': 16, 'V': 10, 'W': 22, 'X': 25, 'Y': 24, 'Z': 23
-    }
-
-    somma = 0
-    for i, c in enumerate(cf_parziale):
-        if i % 2 == 0:  # posizione dispari
-            somma += valori_dispari[c]
-        else:           # posizione pari
-            somma += valori_pari[c]
-
-    return chr((somma % 26) + ord('A'))
-
-
-def valida_codice_fiscale(cf):
-    # Verifica la lunghezza del codice fiscale
-    if len(cf) != 16:
-        return False, "La lunghezza del codice fiscale deve essere di 16 caratteri."
-
-    # Controllo formato generale (solo lettere e numeri)
-    if not re.match(r'^[A-Z0-9]{16}$', cf):
-        return False, "Il codice fiscale deve contenere solo caratteri alfanumerici maiuscoli."
-
-    # Dividi le parti del codice fiscale
-    cf_parziale = cf[:15]
-    carattere_di_controllo = cf[15]
-
-    # Calcola il carattere di controllo e verifica
-    carattere_calcolato = calcola_carattere_di_controllo(cf_parziale)
-    if carattere_calcolato != carattere_di_controllo:
-        return False, f"Il carattere di controllo non è corretto. Doveva essere '{carattere_calcolato}', ma è '{carattere_di_controllo}'."
-
-    # Controllo sulla struttura di base (per esempio, verifica se la parte della data e del comune sono valide)
-    if not re.match(r'^[A-Z]{6}\d{2}[A-EHLMPR-T][0-9]{2}[A-Z0-9]{4}$', cf):
-        return False, "La struttura del codice fiscale non è corretta."
-
-    # Se tutti i controlli sono superati
-    return True, "Codice fiscale valido."
-
 # Funzione di validazione dell'indirizzo
 def valida_indirizzo(indirizzo):
     match = re.match(r"^[A-Za-z\s]+,\s*\d+,\s*([A-Za-z\s]+)$", indirizzo)
@@ -80,6 +28,52 @@ def valida_telefono(telefono):
         telefono.startswith("3") and
         len(set(telefono)) > 1  # Evita numeri con tutte le cifre uguali
     )
+
+# Funzione di validazione del codice fiscale con feedback dettagliato
+
+
+def valida_codice_fiscale(cf):
+    cf = cf.upper()
+
+    # Verifica della lunghezza
+    if len(cf) != 16:
+        return False, "Errore: Il codice fiscale deve contenere esattamente 16 caratteri."
+
+    # Verifica del formato (6 lettere, 2 numeri, 1 lettera, 2 numeri, 1 lettera, 3 numeri, 1 lettera)
+    if not re.match(r'^[A-Z]{6}[0-9]{2}[A-EHLMPR-T][0-9]{2}[A-Z][0-9]{3}[A-Z]$', cf):
+        return False, "Errore: Il formato del codice fiscale non è corretto. Controlla di aver inserito lettere e numeri nelle posizioni giuste."
+
+    # Coefficenti per il calcolo del carattere di controllo
+    odd_values = {
+        '0': 1, '1': 0, '2': 5, '3': 7, '4': 9, '5': 13, '6': 15, '7': 17, '8': 19, '9': 21,
+        'A': 1, 'B': 0, 'C': 5, 'D': 7, 'E': 9, 'F': 13, 'G': 15, 'H': 17, 'I': 19, 'J': 21,
+        'K': 2, 'L': 4, 'M': 18, 'N': 20, 'O': 11, 'P': 3, 'Q': 6, 'R': 8, 'S': 12, 'T': 14,
+        'U': 16, 'V': 10, 'W': 22, 'X': 25, 'Y': 24, 'Z': 23
+    }
+    even_values = {
+        '0': 0, '1': 1, '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9,
+        'A': 0, 'B': 1, 'C': 2, 'D': 3, 'E': 4, 'F': 5, 'G': 6, 'H': 7, 'I': 8, 'J': 9,
+        'K': 10, 'L': 11, 'M': 12, 'N': 13, 'O': 14, 'P': 15, 'Q': 16, 'R': 17, 'S': 18, 'T': 19,
+        'U': 20, 'V': 21, 'W': 22, 'X': 23, 'Y': 24, 'Z': 25
+    }
+    check_chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+
+    # Calcolo del totale per il checksum
+    total = 0
+    for i in range(15):
+        char = cf[i]
+        if i % 2 == 0:  # Caratteri in posizione dispari
+            total += odd_values[char]
+        else:  # Caratteri in posizione pari
+            total += even_values[char]
+
+    # Determina il carattere di controllo atteso
+    expected_check_char = check_chars[total % 26]
+    if cf[-1] != expected_check_char:
+        return False, f"Errore: Il carattere di controllo finale è errato. Dovrebbe essere '{expected_check_char}', ma è '{cf[-1]}'."
+
+    # Se tutte le verifiche passano
+    return True, "Il codice fiscale è valido."
 
 # Inizializza il modello GPT-4o-mini
 llm = ChatOpenAI(model_name="gpt-4o-mini")
@@ -141,13 +135,14 @@ if cliente.lower() == "sì":
         "Risposta: "
     )
 
-    # Validazione e raccolta del codice fiscale
+    # Validazione e raccolta del codice fiscale con feedback dettagliato
     while True:
         identificativo = input("Per procedere, indica il tuo codice fiscale: ")
-        if valida_codice_fiscale(identificativo):
+        is_valid, message = valida_codice_fiscale(identificativo)
+        print(message)
+        if is_valid:
             break
-        else:
-            print("Errore: Il codice fiscale inserito non è valido. Assicurati di inserire un codice fiscale italiano corretto.")
+
 
 else:
     tipo_servizio = "censimento anagrafico"
