@@ -1,6 +1,7 @@
 
 import os
 import re
+import requests
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import PromptTemplate
 from langchain.chains import LLMChain
@@ -10,7 +11,7 @@ with open('comuni_italiani.txt', 'r') as file:
     comuni_italiani = {line.strip().upper() for line in file.readlines()}
 
 # Funzione di validazione del codice fiscale
-def valida_codice_fiscale(cf):
+def verifica_codice_fiscale(cf):
     cf = cf.upper()
     # Verifica della lunghezza
     if len(cf) != 16:
@@ -28,12 +29,41 @@ def valida_codice_fiscale(cf):
                    'K': 10, 'L': 11, 'M': 12, 'N': 13, 'O': 14, 'P': 15, 'Q': 16, 'R': 17, 'S': 18, 'T': 19,
                    'U': 20, 'V': 21, 'W': 22, 'X': 23, 'Y': 24, 'Z': 25}
     check_chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
-    total = sum(odd_values[cf[i]] if i %
-                2 == 0 else even_values[cf[i]] for i in range(15))
+    total = sum(odd_values[cf[i]] if i % 2 == 0 else even_values[cf[i]] for i in range(15))
     expected_check_char = check_chars[total % 26]
+    
     if cf[-1] != expected_check_char:
         return False, f"Errore: Il carattere di controllo finale è errato. Dovrebbe essere '{expected_check_char}'."
     return True, "Il codice fiscale è valido."
+
+# Funzione per validare e verificare l'esistenza del codice fiscale tramite chiamata API
+def valida_codice_fiscale(cf):
+    # Validazione del codice fiscale
+    is_valid, message = verifica_codice_fiscale(cf)
+    
+    if not is_valid:
+        return False, message  # Restituisce False se la validazione fallisce
+    
+    # Se il codice fiscale è valido, effettua la chiamata HTTP per verificarne l'esistenza
+    url = "https://assistudio.assieasy.com/assieasy/api/anagrafica/get"
+    payload = f'CODICEFISCALE={cf}'
+    headers = {
+        'chiave-hi': 'ASSIEASY',
+        'token': 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpYXQiOjE3MzEwODU3NTMsImV4cCI6MTg1NzIyOTc1MywiZGF0YSI6eyJpZCI6IjEzIiwiY2hpYXZlX2hpIjoiQVNTSUhJIn19.Znu-CjXdUG-UMiViWqggbNoaod2lbD7E1Iw6VmvTqEw',
+        'Content-Type': 'application/x-www-form-urlencoded',
+    }
+    
+    try:
+        response = requests.post(url, headers=headers, data=payload, verify=False)  # Disabilita SSL solo per test
+        response.raise_for_status()  # Verifica eventuali errori HTTP
+        data = response.json()  # Ritorna il contenuto della risposta JSON
+
+        # Controllo del campo "data" nella risposta API
+        if not data.get("data"):
+            return False, "Errore: Il campo 'data' è vuoto o non contiene informazioni valide."
+        return True, "Il codice fiscale è valido ed è presente nei nostri sistemi."  # Ritorna il contenuto della risposta JSON se il campo "data" è valido
+    except requests.exceptions.RequestException as e:
+        return False, f"Errore nella chiamata API: {e}"
 
 # Funzione di validazione dell'indirizzo
 def valida_indirizzo(indirizzo):
