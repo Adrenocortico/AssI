@@ -202,7 +202,22 @@ prompt_garanzia = PromptTemplate(
 )
 chain_garanzia = LLMChain(llm=llm, prompt=prompt_garanzia)
 
-# Funzione per riepilogare il contesto in modo leggibile
+# Prompt per interpretare le richieste di modifica in linguaggio naturale
+prompt_modifiche = PromptTemplate(
+    input_variables=["modifica", "contesto_attuale"],
+    template=(
+        "Sei un assistente per una polizza casa. Il cliente ha richiesto la seguente modifica: '{modifica}'. "
+        "Dettagli attuali della polizza: {contesto_attuale}. "
+        "Determina l'azione richiesta: se riguarda l'aggiunta di una garanzia, verifica se esiste in 'garanzie_possibili_casa'. "
+        "Se l'azione è valida, rispondi con 'aggiungere <garanzia>'. "
+        "Per modificare un massimale, rispondi con 'modifica <garanzia> <massimale>' e aggiorna l'importo. "
+        "Per rimuovere, rispondi 'rimuovere <garanzia>'. "
+        "Se si tratta di un dato iniziale dell'immobile, rispondi con 'modifica <dato> <nuovo valore>'. "
+        "Rispondi solo con l'azione necessaria."
+    )
+)
+modifiche_chain = LLMChain(llm=llm, prompt=prompt_modifiche)
+
 def riepilogo_contesto(contesto):
     print("\n*** Riepilogo della richiesta ***")
     print("Ubicazione:", contesto["ubicazione"])
@@ -215,7 +230,6 @@ def riepilogo_contesto(contesto):
         print(f"  - {garanzia}: Massimale {massimale}")
     print("\nSe hai bisogno di ulteriori modifiche o aggiustamenti, fammelo sapere!")
 
-# Funzione per gestire l'interazione per la polizza casa
 def assistente_casa():
     print("Benvenuto all'assistente specializzato per le polizze casa.")
     print("Per iniziare, raccogliamo alcune informazioni di base sull'immobile per il preventivo.")
@@ -302,40 +316,53 @@ def assistente_casa():
     # Primo riepilogo
     riepilogo_contesto(contesto)
     
-    # Modifiche successive
+    # Modifiche successive in linguaggio naturale
     while True:
         modifica = input("\nDesideri fare modifiche? Se sì, descrivi la modifica, oppure digita 'fine' per terminare: ").strip().lower()
         if modifica == "fine":
             print("Grazie per aver completato la richiesta. Rimaniamo a disposizione!")
             break
         else:
-            # Aggiunge nuove garanzie solo se presenti nella lista di garanzie possibili
-            if "aggiungi" in modifica:
-                garanzia_da_aggiungere = modifica.replace("aggiungi", "").strip()
-                if garanzia_da_aggiungere in garanzie_possibili_casa:
-                    if garanzia_da_aggiungere not in contesto["garanzie"]:
-                        contesto["garanzie"][garanzia_da_aggiungere] = int(input(f"Specifica il massimale per '{garanzia_da_aggiungere}': "))
-                        print(f"Garanzia '{garanzia_da_aggiungere}' aggiunta.")
-                    else:
-                        print(f"La garanzia '{garanzia_da_aggiungere}' è già presente.")
-                else:
-                    print(f"La garanzia '{garanzia_da_aggiungere}' non è disponibile. Ecco l'elenco delle garanzie disponibili: {', '.join(garanzie_possibili_casa)}")
-
-            # Usa il modello per interpretare modifiche ad altre parti del contesto
-            prompt_modifiche = PromptTemplate(
-                input_variables=["modifica", "contesto_attuale"],
-                template=(
-                    "Sei un assistente assicurativo per una polizza casa. Il cliente ha richiesto la seguente modifica: '{modifica}'. "
-                    "Contesto attuale della polizza: {contesto_attuale}. "
-                    "Se la modifica riguarda un dato dell'immobile, aggiorna il dato; se riguarda una garanzia, aggiorna o modifica il massimale o rimuovi la garanzia."
-                )
-            )
-            modifiche_chain = LLMChain(llm=llm, prompt=prompt_modifiche)
+            # Interpreta l'azione richiesta per aggiunta, rimozione o modifica di garanzie o dati
             risposta_modifica = modifiche_chain.invoke({
                 "modifica": modifica,
                 "contesto_attuale": contesto
-            })
-            print("Modifica applicata:", risposta_modifica["text"])
+            })["text"].strip().lower()
+
+            # Aggiunta di garanzie
+            if risposta_modifica.startswith("aggiungere"):
+                garanzia = risposta_modifica.split("aggiungere ", 1)[1]
+                if garanzia in garanzie_possibili_casa:
+                    contesto["garanzie"][garanzia] = int(input(f"Specifica il massimale per '{garanzia}': "))
+                    print(f"Garanzia '{garanzia}' aggiunta con successo.")
+                else:
+                    print(f"La garanzia '{garanzia}' non è disponibile.")
+
+            # Rimozione di garanzie
+            elif risposta_modifica.startswith("rimuovere"):
+                garanzia = risposta_modifica.split("rimuovere ", 1)[1]
+                if garanzia in contesto["garanzie"]:
+                    del contesto["garanzie"][garanzia]
+                    print(f"Garanzia '{garanzia}' rimossa.")
+                else:
+                    print(f"La garanzia '{garanzia}' non era presente nella polizza.")
+
+            # Modifica dei massimali delle garanzie o dei dati iniziali
+            elif "modifica" in risposta_modifica:
+                parts = risposta_modifica.split()
+                if parts[1] in garanzie_possibili_casa:
+                    garanzia = parts[1]
+                    massimale = int(parts[2])
+                    contesto["garanzie"][garanzia] = massimale
+                    print(f"Massimale di '{garanzia}' aggiornato a {massimale}.")
+                else:
+                    # Gestione delle modifiche sui dati dell’immobile
+                    dato = parts[1]
+                    valore = parts[2]
+                    contesto[dato] = valore if dato == "tipo_casa" else int(valore)
+                    print(f"{dato.capitalize()} aggiornato a {valore}.")
+
+            # Mostra il riepilogo aggiornato
             riepilogo_contesto(contesto)
 
 def assistente_salute():
