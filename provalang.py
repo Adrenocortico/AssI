@@ -209,7 +209,7 @@ prompt_casa = PromptTemplate(
 chain_casa = LLMChain(llm=llm, prompt=prompt_casa)
 
 # Funzione per gestire l'interazione per la polizza casa
-def assistente_casa_cliente():
+def assistente_casa():
     print("Benvenuto all'assistente specializzato per le polizze casa.")
     print("Per iniziare, raccogliamo alcune informazioni di base sull'immobile per il preventivo.")
     
