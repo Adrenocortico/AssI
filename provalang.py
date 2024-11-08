@@ -190,7 +190,141 @@ garanzie_possibili_casa = [
     "responsabilità civile della proprietà", "ricorso terzi", "tutela legale"
 ]
 
+# Prompt per interpretare la risposta del cliente su ogni garanzia
+prompt_garanzia = PromptTemplate(
+    input_variables=["risposta_cliente"],
+    template=(
+        "Sei un assistente virtuale di un'agenzia assicurativa. "
+        "Il cliente ha risposto: '{risposta_cliente}' alla domanda se desidera includere una garanzia. "
+        "Interpreta se la risposta implica l'inclusione o l'esclusione della garanzia. "
+        "Rispondi solo con 'includere' o 'escludere'."
+    )
+)
+chain_garanzia = LLMChain(llm=llm, prompt=prompt_garanzia)
 
+def riepilogo_contesto(contesto):
+    print("\n*** Riepilogo della richiesta ***")
+    print("Ubicazione:", contesto["ubicazione"])
+    print("Metri quadri:", contesto["metri_quadri"])
+    print("Piani del fabbricato:", contesto["piani_fabbricato"])
+    print("Tipo di casa:", contesto["tipo_casa"])
+    print("Anno di costruzione/ristrutturazione:", contesto["anno_costruzione"])
+    print("Garanzie e massimali selezionati:")
+    for garanzia, massimale in contesto["garanzie"].items():
+        print(f"  - {garanzia}: Massimale {massimale}")
+
+# Funzione per gestire l'interazione per la polizza casa
+def assistente_casa():
+    print("Benvenuto all'assistente specializzato per le polizze casa.")
+    print("Per iniziare, raccogliamo alcune informazioni di base sull'immobile per il preventivo.")
+    
+    # Contesto della conversazione per ricordare i dettagli dell’immobile e le garanzie richieste
+    contesto = {
+        "ubicazione": None,
+        "metri_quadri": None,
+        "piani_fabbricato": None,
+        "tipo_casa": None,
+        "anno_costruzione": None,
+        "garanzie": {}
+    }
+
+    # Raccoglie l'ubicazione del rischio immediatamente
+    while not contesto["ubicazione"]:
+        contesto["ubicazione"] = input("Inserisci l'ubicazione dell’immobile (indirizzo): ").strip()
+        if not valida_indirizzo(contesto["ubicazione"]):
+            print("Errore: Inserisci un indirizzo valido nel formato 'Via, Numero civico, Città'.")
+
+    # Raccoglie le altre informazioni necessarie per il preventivo
+    while not contesto["metri_quadri"]:
+        try:
+            contesto["metri_quadri"] = int(input("Inserisci i metri quadri dell’immobile: ").strip())
+        except ValueError:
+            print("Errore: Inserisci un numero valido per i metri quadri.")
+
+    while not contesto["piani_fabbricato"]:
+        try:
+            contesto["piani_fabbricato"] = int(input("Inserisci il numero di piani del fabbricato: ").strip())
+        except ValueError:
+            print("Errore: Inserisci un numero valido per i piani.")
+
+    while not contesto["tipo_casa"]:
+        contesto["tipo_casa"] = input("Inserisci il tipo di casa (es. appartamento, villa): ").strip().lower()
+        if not contesto["tipo_casa"]:
+            print("Errore: Il tipo di casa è obbligatorio.")
+
+    while not contesto["anno_costruzione"]:
+        try:
+            contesto["anno_costruzione"] = int(input("Inserisci l'anno di costruzione o dell'ultima ristrutturazione completa: ").strip())
+        except ValueError:
+            print("Errore: Inserisci un numero valido per l'anno.")
+
+    print("\nDettagli dell'immobile registrati correttamente.")
+
+    # Selezione delle garanzie con interpretazione della risposta tramite LangChain
+    print("\nPer ogni garanzia disponibile, rispondi con un linguaggio naturale se vuoi includerla o meno.")
+    for garanzia in garanzie_possibili_casa:
+        risposta_cliente = input(f"Vuoi includere la garanzia '{garanzia}'? ").strip().lower()
+        # Usa LangChain per interpretare la risposta
+        decisione = chain_garanzia.invoke({"risposta_cliente": risposta_cliente}).content.strip().lower()
+        if decisione == "includere":
+            contesto["garanzie"][garanzia] = None  # Placeholder per il massimale
+
+    # Chiede i massimali per le garanzie selezionate
+    for garanzia in list(contesto["garanzie"]):
+        if garanzia == "incendio del fabbricato":
+            contesto["garanzie"]["incendio del fabbricato"] = int(input("Specifica il massimale per 'incendio del fabbricato': "))
+        elif garanzia == "incendio del contenuto":
+            contesto["garanzie"]["incendio del contenuto"] = int(input("Specifica il massimale per 'incendio del contenuto': "))
+        elif garanzia == "furto del contenuto":
+            contesto["garanzie"]["furto del contenuto"] = int(input("Specifica il massimale per 'furto del contenuto': "))
+            risposta = input("Vuoi includere il furto di gioielli e preziosi? ").strip().lower()
+            if chain_garanzia.invoke({"risposta_cliente": risposta}).content.strip().lower() == "includere":
+                contesto["garanzie"]["furto dei gioielli e preziosi"] = int(input("Specifica il massimale per 'furto dei gioielli e preziosi': "))
+            risposta = input("Vuoi includere scippo e rapina? ").strip().lower()
+            if chain_garanzia.invoke({"risposta_cliente": risposta}).content.strip().lower() == "includere":
+                contesto["garanzie"]["scippo e rapina"] = int(input("Specifica il massimale per 'scippo e rapina': "))
+        else:
+            contesto["garanzie"][garanzia] = int(input(f"Specifica il massimale per '{garanzia}': "))
+
+    # Primo riepilogo
+    riepilogo_contesto(contesto)
+    
+    # Modifiche successive
+    while True:
+        modifica = input("\nDesideri fare modifiche? Se sì, descrivi la modifica, oppure digita 'fine' per terminare: ").strip().lower()
+        if modifica == "fine":
+            print("Grazie per aver completato la richiesta. Rimaniamo a disposizione!")
+            break
+        else:
+            # Aggiunge nuove garanzie solo se presenti nella lista di garanzie possibili
+            if "aggiungi" in modifica:
+                garanzia_da_aggiungere = modifica.replace("aggiungi", "").strip()
+                if garanzia_da_aggiungere in garanzie_possibili_casa:
+                    if garanzia_da_aggiungere not in contesto["garanzie"]:
+                        contesto["garanzie"][garanzia_da_aggiungere] = int(input(f"Specifica il massimale per '{garanzia_da_aggiungere}': "))
+                        print(f"Garanzia '{garanzia_da_aggiungere}' aggiunta.")
+                    else:
+                        print(f"La garanzia '{garanzia_da_aggiungere}' è già presente.")
+                else:
+                    print(f"La garanzia '{garanzia_da_aggiungere}' non è disponibile. Ecco l'elenco delle garanzie disponibili: {', '.join(garanzie_possibili_casa)}")
+
+            # Usa il modello per interpretare modifiche ad altre parti del contesto
+            prompt_modifiche = PromptTemplate(
+                input_variables=["modifica", "contesto_attuale"],
+                template=(
+                    "Sei un assistente assicurativo per una polizza casa. Il cliente ha richiesto la seguente modifica: '{modifica}'. "
+                    "Contesto attuale della polizza: {contesto_attuale}. "
+                    "Se la modifica riguarda un dato dell'immobile, aggiorna il dato; se riguarda una garanzia, aggiorna o modifica il massimale o rimuovi la garanzia."
+                )
+            )
+            modifiche_chain = LLMChain(llm=llm, prompt=prompt_modifiche)
+            risposta_modifica = modifiche_chain.invoke({
+                "modifica": modifica,
+                "contesto_attuale": contesto
+            })
+            print("Modifica applicata:", risposta_modifica)
+            # Mostra solo il riepilogo aggiornato
+            riepilogo_contesto(contesto)
 
 def assistente_salute():
     print("Benvenuto all'assistente specializzato per le polizze salute.")
