@@ -202,6 +202,7 @@ prompt_garanzia = PromptTemplate(
 )
 chain_garanzia = LLMChain(llm=llm, prompt=prompt_garanzia)
 
+# Funzione per riepilogare il contesto in modo leggibile
 def riepilogo_contesto(contesto):
     print("\n*** Riepilogo della richiesta ***")
     print("Ubicazione:", contesto["ubicazione"])
@@ -212,13 +213,13 @@ def riepilogo_contesto(contesto):
     print("Garanzie e massimali selezionati:")
     for garanzia, massimale in contesto["garanzie"].items():
         print(f"  - {garanzia}: Massimale {massimale}")
+    print("\nSe hai bisogno di ulteriori modifiche o aggiustamenti, fammelo sapere!")
 
 # Funzione per gestire l'interazione per la polizza casa
 def assistente_casa():
     print("Benvenuto all'assistente specializzato per le polizze casa.")
     print("Per iniziare, raccogliamo alcune informazioni di base sull'immobile per il preventivo.")
     
-    # Contesto della conversazione per ricordare i dettagli dell’immobile e le garanzie richieste
     contesto = {
         "ubicazione": None,
         "metri_quadri": None,
@@ -262,12 +263,19 @@ def assistente_casa():
 
     # Selezione delle garanzie con interpretazione della risposta tramite LangChain
     print("\nPer ogni garanzia disponibile, rispondi con un linguaggio naturale se vuoi includerla o meno.")
+    include_furto_gioielli = False
+    include_scippo_rapina = False
+    
     for garanzia in garanzie_possibili_casa:
         risposta_cliente = input(f"Vuoi includere la garanzia '{garanzia}'? ").strip().lower()
-        # Usa LangChain per interpretare la risposta
-        decisione = chain_garanzia.invoke({"risposta_cliente": risposta_cliente}).content.strip().lower()
+        decisione = chain_garanzia.invoke({"risposta_cliente": risposta_cliente})["text"].strip().lower()
+        
         if decisione == "includere":
             contesto["garanzie"][garanzia] = None  # Placeholder per il massimale
+            # Controllo per il furto del contenuto, aggiungendo condizioni per gioielli e scippo
+            if garanzia == "furto del contenuto":
+                include_furto_gioielli = True
+                include_scippo_rapina = True
 
     # Chiede i massimali per le garanzie selezionate
     for garanzia in list(contesto["garanzie"]):
@@ -277,12 +285,17 @@ def assistente_casa():
             contesto["garanzie"]["incendio del contenuto"] = int(input("Specifica il massimale per 'incendio del contenuto': "))
         elif garanzia == "furto del contenuto":
             contesto["garanzie"]["furto del contenuto"] = int(input("Specifica il massimale per 'furto del contenuto': "))
-            risposta = input("Vuoi includere il furto di gioielli e preziosi? ").strip().lower()
-            if chain_garanzia.invoke({"risposta_cliente": risposta}).content.strip().lower() == "includere":
-                contesto["garanzie"]["furto dei gioielli e preziosi"] = int(input("Specifica il massimale per 'furto dei gioielli e preziosi': "))
-            risposta = input("Vuoi includere scippo e rapina? ").strip().lower()
-            if chain_garanzia.invoke({"risposta_cliente": risposta}).content.strip().lower() == "includere":
-                contesto["garanzie"]["scippo e rapina"] = int(input("Specifica il massimale per 'scippo e rapina': "))
+            # Chiede solo una volta se includere furto dei gioielli e scippo e rapina
+            if include_furto_gioielli:
+                risposta = input("Vuoi includere il furto di gioielli e preziosi? ").strip().lower()
+                if chain_garanzia.invoke({"risposta_cliente": risposta})["text"].strip().lower() == "includere":
+                    contesto["garanzie"]["furto dei gioielli e preziosi"] = int(input("Specifica il massimale per 'furto dei gioielli e preziosi': "))
+                include_furto_gioielli = False  # Disabilita la richiesta successiva
+            if include_scippo_rapina:
+                risposta = input("Vuoi includere scippo e rapina? ").strip().lower()
+                if chain_garanzia.invoke({"risposta_cliente": risposta})["text"].strip().lower() == "includere":
+                    contesto["garanzie"]["scippo e rapina"] = int(input("Specifica il massimale per 'scippo e rapina': "))
+                include_scippo_rapina = False  # Disabilita la richiesta successiva
         else:
             contesto["garanzie"][garanzia] = int(input(f"Specifica il massimale per '{garanzia}': "))
 
@@ -322,8 +335,7 @@ def assistente_casa():
                 "modifica": modifica,
                 "contesto_attuale": contesto
             })
-            print("Modifica applicata:", risposta_modifica)
-            # Mostra solo il riepilogo aggiornato
+            print("Modifica applicata:", risposta_modifica["text"])
             riepilogo_contesto(contesto)
 
 def assistente_salute():
